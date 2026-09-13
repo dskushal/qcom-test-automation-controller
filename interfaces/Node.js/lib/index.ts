@@ -1,7 +1,7 @@
 // Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-import * as bindings from 'bindings';
+import bindings from 'bindings';
 import { TACDevice } from './device';
 import { DeviceInfo } from './types';
 

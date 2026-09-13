@@ -120,7 +120,22 @@ const device: TACDevice = QTAC.openDevice(devices[0].port);
 
 ## Building from Source
 
-```bash
+On Windows ARM64, open a PowerShell terminal with the Qt MSVC ARM64
+installation selected before running the Node.js build:
+
+```powershell
+$env:QTBIN = "C:\Qt\6.9.3\msvc2022_arm64\bin"
+$env:CMAKE_PREFIX_PATH = Split-Path $env:QTBIN -Parent
+```
+
+Replace the Qt version/path with the installation on your machine. The Qt
+configuration file must exist at:
+
+```text
+C:\Qt\6.9.3\msvc2022_arm64\lib\cmake\Qt6\Qt6Config.cmake
+```
+
+```powershell
 # Install dependencies
 npm install
 
@@ -132,6 +147,9 @@ npm run build
 
 # Run tests
 npm test
+
+# Run an example (requires a TAC device)
+node examples/list-devices.js
 ```
 
 ## Platform Support
