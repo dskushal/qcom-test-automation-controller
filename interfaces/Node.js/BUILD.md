@@ -41,11 +41,20 @@
 
 Once the prerequisites are met:
 
-```bash
+```powershell
 cd interfaces/Node.js
+
+# Windows ARM64: use the Qt MSVC ARM64 installation.
+# Change the version/path to match your Qt installation.
+$env:QTBIN = "C:\Qt\6.9.3\msvc2022_arm64\bin"
+$env:CMAKE_PREFIX_PATH = Split-Path $env:QTBIN -Parent
+
+# Confirm Qt6Config.cmake is available
+Test-Path "$env:CMAKE_PREFIX_PATH\lib\cmake\Qt6\Qt6Config.cmake"
 
 # Install dependencies and build native module
 npm install
+npm run build:native
 
 # Build TypeScript layer
 npm run build
@@ -68,6 +77,20 @@ npm run build
 ### Windows: "MSVC not found"
 
 **Solution**: Install Visual Studio 2022 or Build Tools for Visual Studio 2022 with C++ desktop development workload.
+
+### Windows: "Qt6 not found"
+
+**Solution**: Set `QTBIN` to the Qt MSVC package matching the build
+architecture, then set `CMAKE_PREFIX_PATH` to its installation prefix:
+
+```powershell
+$env:QTBIN = "C:\Qt\6.9.3\msvc2022_arm64\bin"
+$env:CMAKE_PREFIX_PATH = Split-Path $env:QTBIN -Parent
+npm run build:native
+```
+
+The following file must exist:
+`C:\Qt\6.9.3\msvc2022_arm64\lib\cmake\Qt6\Qt6Config.cmake`.
 
 ### Linux: "Qt6 not found"
 
@@ -92,7 +115,10 @@ node examples/list-devices.js
 
 If you need to rebuild just the native module:
 
-```bash
+```powershell
+# Windows ARM64
+$env:QTBIN = "C:\Qt\6.9.3\msvc2022_arm64\bin"
+$env:CMAKE_PREFIX_PATH = Split-Path $env:QTBIN -Parent
 npm run build:native
 ```
 

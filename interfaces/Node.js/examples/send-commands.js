@@ -1,7 +1,7 @@
 // Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
-const QTAC = require('../dist/index').default;
+const QTAC = require('./qtac-native');
 
 console.log('=== QTAC Send Commands Example ===\n');
 
