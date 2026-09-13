@@ -98,6 +98,21 @@ jobs:
     - name: Build
       run: ./build.sh
 
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Build Node.js Interface
+      working-directory: interfaces/Node.js
+      run: |
+        npm install
+        npm run build
+
+    - name: Run Node.js Unit Tests
+      working-directory: interfaces/Node.js
+      run: npm run test:unit
+
     - name: Generate devicelist.json
       run: |
         configRoot="${{ matrix.config_root }}"
@@ -163,6 +178,23 @@ jobs:
     - name: Build
       shell: cmd
       run: build.bat
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Build Node.js Interface
+      shell: pwsh
+      working-directory: interfaces/Node.js
+      run: |
+        npm install
+        npm run build
+
+    - name: Run Node.js Unit Tests
+      shell: pwsh
+      working-directory: interfaces/Node.js
+      run: npm run test:unit
 
     - name: Generate devicelist.json
       shell: pwsh
