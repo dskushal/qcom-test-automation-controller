@@ -90,14 +90,13 @@ if(STANDALONE_BUILD)
         set(BUILD_CONFIG "Release")
     endif()
 
-    # Look for TACDev library in build output
+    # Look for TACDev library in build output (static library)
     set(TACDEV_LIB_PATH "${REPO_ROOT}/__Builds/${BUILD_ARCH}/${BUILD_CONFIG}")
 
     if(WIN32)
-        set(TACDEV_LIB_FILE "${TACDEV_LIB_PATH}/bin/${TACDEV_LIB_NAME}.dll")
-        set(TACDEV_IMPLIB "${TACDEV_LIB_PATH}/lib/${TACDEV_LIB_NAME}.lib")
+        set(TACDEV_LIB_FILE "${TACDEV_LIB_PATH}/lib/${TACDEV_LIB_NAME}.lib")
     else()
-        set(TACDEV_LIB_FILE "${TACDEV_LIB_PATH}/lib/lib${TACDEV_LIB_NAME}.so")
+        set(TACDEV_LIB_FILE "${TACDEV_LIB_PATH}/lib/lib${TACDEV_LIB_NAME}.a")
     endif()
 
     message(STATUS "Looking for TACDev library at: ${TACDEV_LIB_FILE}")
@@ -106,20 +105,23 @@ if(STANDALONE_BUILD)
         message(FATAL_ERROR "TACDev library not found at ${TACDEV_LIB_FILE}. Please build the main QTAC project first using build.bat or build.sh")
     endif()
 
-    # Create imported target
-    add_library(TACDev SHARED IMPORTED)
-    if(WIN32)
-        set_target_properties(TACDev PROPERTIES
-            IMPORTED_LOCATION "${TACDEV_LIB_FILE}"
-            IMPORTED_IMPLIB "${TACDEV_IMPLIB}"
-        )
-    else()
-        set_target_properties(TACDev PROPERTIES
-            IMPORTED_LOCATION "${TACDEV_LIB_FILE}"
-        )
-    endif()
+    # Create imported target for static library
+    add_library(TACDev STATIC IMPORTED)
+    set_target_properties(TACDev PROPERTIES
+        IMPORTED_LOCATION "${TACDEV_LIB_FILE}"
+    )
 
     target_link_libraries(qtac_napi PRIVATE TACDev)
+
+    # Since TACDev is static, we need to link its dependencies
+    # Find Qt6 packages that TACDev depends on
+    find_package(Qt6 COMPONENTS Core SerialPort QUIET)
+    if(Qt6_FOUND)
+        message(STATUS "Found Qt6 for transitive dependencies")
+        target_link_libraries(qtac_napi PRIVATE Qt6::Core Qt6::SerialPort)
+    else()
+        message(WARNING "Qt6 not found - NAPI module may have unresolved symbols at runtime")
+    endif()
 else()
     # In integrated build, link against the target
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
