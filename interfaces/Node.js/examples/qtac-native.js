@@ -3,7 +3,16 @@
 const path = require('path');
 
 const repositoryRoot = path.resolve(__dirname, '../../..');
-const runtimeBin = path.join(repositoryRoot, '__Builds', 'ARM64', 'Release', 'bin');
+const runtimeArchitecture = {
+    x64: 'x64',
+    arm64: 'ARM64',
+}[process.arch];
+
+if (!runtimeArchitecture) {
+    throw new Error(`Unsupported Node.js architecture: ${process.arch}. Expected x64 or arm64.`);
+}
+
+const runtimeBin = path.join(repositoryRoot, '__Builds', runtimeArchitecture, 'Release', 'bin');
 const qtBin = process.env.QTBIN;
 
 // qtac.node links against Qt and TACDev runtime DLLs. `build.bat` adds these
