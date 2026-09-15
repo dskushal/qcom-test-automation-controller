@@ -61,6 +61,10 @@ add_library(qtac_napi SHARED
     src/addon.cc
     src/tacdev_wrapper.cc
     src/utils.cc
+    # cmake-js supplies the Windows delay-load hook here. Without it the
+    # addon tries to load a literal node.exe, which works in Node.js but
+    # terminates Electron because Electron's executable is electron.exe.
+    ${CMAKE_JS_SRC}
 )
 
 # Set output name to qtac.node

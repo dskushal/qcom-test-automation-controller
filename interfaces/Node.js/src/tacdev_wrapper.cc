@@ -213,10 +213,12 @@ Napi::Value TACDevWrapper::GetPortData(const Napi::CallbackInfo& info) {
 
     int index = info[0].As<Napi::Number>().Int32Value();
     char buffer[512];
-    TAC_ERROR result = ::GetPortData(index, buffer, sizeof(buffer));
+    // GetPortData returns the number of bytes copied, not a TAC error code.
+    unsigned long bytesWritten = ::GetPortData(index, buffer, sizeof(buffer));
 
-    if (result != NO_TAC_ERROR) {
-        ThrowTACError(env, result, "Failed to get port data");
+    if (bytesWritten == 0) {
+        Napi::Error::New(env, "Failed to get port data for device index " +
+            std::to_string(index)).ThrowAsJavaScriptException();
         return env.Undefined();
     }
 
