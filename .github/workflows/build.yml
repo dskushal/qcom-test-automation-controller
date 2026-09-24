@@ -191,6 +191,16 @@ jobs:
         npm install
         npm run build
 
+    - name: Add native runtime DLLs to PATH
+      shell: pwsh
+      run: |
+        $runtimeBin = Join-Path $env:GITHUB_WORKSPACE "__Builds\x64\Release\bin"
+        if (-not (Test-Path $runtimeBin)) {
+          throw "Native runtime directory was not found: $runtimeBin"
+        }
+        $env:Path = "$runtimeBin;$env:QTBIN;$env:Path"
+        "PATH=$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
     - name: Run Node.js Unit Tests
       shell: pwsh
       working-directory: interfaces/Node.js
