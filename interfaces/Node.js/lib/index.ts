@@ -2,8 +2,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 import bindings from 'bindings';
+import path from 'path';
 import { TACDevice } from './device';
 import { DeviceInfo } from './types';
+
+// `qtac.node` is linked against TACDev and Qt DLLs on Windows. The main
+// project build adds those directories to PATH only for its own process, so
+// add them before loading the addon in consumers such as Jest as well.
+if (process.platform === 'win32') {
+    const runtimeArchitecture = process.arch === 'arm64' ? 'ARM64' : 'x64';
+    const runtimeBin = path.resolve(__dirname, '../../../__Builds', runtimeArchitecture, 'Release', 'bin');
+    const dependencyPaths = [runtimeBin, process.env.QTBIN, process.env.PATH].filter(
+        (value): value is string => Boolean(value)
+    );
+
+    process.env.PATH = dependencyPaths.join(path.delimiter);
+}
 
 // Load the native NAPI module
 const native = bindings('qtac');
