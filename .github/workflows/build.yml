@@ -110,6 +110,17 @@ jobs:
         npm install
         npm run build
 
+    - name: Add native runtime libraries to LD_LIBRARY_PATH
+      run: |
+        runtime_lib="$GITHUB_WORKSPACE/__Builds/Linux/Release/lib"
+        if [ ! -d "$runtime_lib" ]; then
+          echo "Native runtime directory was not found: $runtime_lib"
+          exit 1
+        fi
+        qt_prefix="${QTBIN%/bin}"
+        export LD_LIBRARY_PATH="$runtime_lib:$qt_prefix/lib:${LD_LIBRARY_PATH:-}"
+        echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+
     - name: Run Node.js Unit Tests
       working-directory: interfaces/Node.js
       run: npm run test:unit
