@@ -65,8 +65,12 @@ target_link_libraries(${APP_NAME} PRIVATE
     Qt6::Xml
     ftd2xx
 
-    $<$<CONFIG:Debug>:UId;QCommond;QCommonConsoled>
-    $<$<NOT:$<CONFIG:Debug>>:UI;QCommon;QCommonConsole>
+    # Quote the generator expression so target_link_libraries receives it as a
+    # single item. An unquoted $<...> containing ';' is split by CMake before the
+    # expression is evaluated; that split is only tolerated since CMake 3.23,
+    # whereas quoting works on the 3.22 minimum too.
+    "$<$<CONFIG:Debug>:UId;QCommond;QCommonConsoled>"
+    "$<$<NOT:$<CONFIG:Debug>>:UI;QCommon;QCommonConsole>"
 )
 
 if(WIN32)
@@ -106,3 +110,6 @@ qt_generate_deploy_app_script(TARGET ${APP_NAME}
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
 install(SCRIPT ${deploy_script})
+
+# Windows file version resource
+qtac_add_version_info(${APP_NAME} "TAC Configuration Editor" "${QTAC_VERSION}")

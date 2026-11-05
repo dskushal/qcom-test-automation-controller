@@ -29,8 +29,9 @@ target_link_libraries(${APP_NAME} PRIVATE
     Qt6::Core
     Qt6::SerialPort
 
-    $<$<CONFIG:Debug>:QCommonConsoled;ftd2xx>
-    $<$<NOT:$<CONFIG:Debug>>:QCommonConsole;ftd2xx>
+
+    "$<$<CONFIG:Debug>:QCommonConsoled;ftd2xx>"
+    "$<$<NOT:$<CONFIG:Debug>>:QCommonConsole;ftd2xx>"
 )
 
 if(WIN32)
@@ -67,3 +68,6 @@ qt_generate_deploy_app_script(
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
 install(SCRIPT ${deploy_script})
+
+# Windows file version resource
+qtac_add_version_info(${APP_NAME} "TAC device dump utility" "${QTAC_VERSION}")

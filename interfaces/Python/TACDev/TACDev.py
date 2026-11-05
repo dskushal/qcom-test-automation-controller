@@ -1,10 +1,7 @@
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause
-
-# TACDev Python Library
-# 	Written by Michael Simpson (msimpson@qti.qualcomm.com) and edited by Biswajit Roy (biswroy@qti.qualcomm.com)
-# 	Don't modify this file.  If you do, you run the risk of missing out on bug fixes and product updates
-
+# Don't modify this file or copy it's contents to directories.
+# If you do, you run the risk of missing out on bug fixes and product updates.
 import logging
 import platform
 import struct
@@ -13,9 +10,36 @@ from ctypes import *
 from pathlib import Path
 from sys import exit
 
-# Configure logging
+# Configure logging.
+# Do not call logging.basicConfig() here: it configures the root logger of the
+# host application at import time. Give this module's logger its own handler
+# instead, so messages are still shown when the host has not set up logging.
+# Hosts can adjust or replace it via logging.getLogger(<this module name>).
 logger = logging.getLogger(__name__)
-logging.basicConfig(format=logging.BASIC_FORMAT, level=logging.INFO)
+if logger.level == logging.NOTSET:
+    logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _log_handler = logging.StreamHandler()
+    _log_handler.setFormatter(logging.Formatter(logging.BASIC_FORMAT))
+    logger.addHandler(_log_handler)
+    logger.propagate = False
+
+# Installed product locations searched before the local development build.
+_INSTALL_DIRS = {
+    "win32": [
+        Path(r"C:\Program Files\Qualcomm\Alpaca"),
+        Path(r"C:\Program Files\Qualcomm\QTAC"),
+    ],
+    "linux": [
+        Path("/opt/qcom/Alpaca/lib"),
+        Path("/opt/qcom/QTAC/lib"),
+    ],
+}
+
+_LIB_NAMES = {
+    "win32": "TACDev.dll",
+    "linux": "libTACDev.so",
+}
 
 _LIBS = {
     ("win32",  "AMD64"): Path("__Builds/x64/Release/bin/TACDev.dll"),
@@ -43,17 +67,30 @@ def _find_lib() -> Path:
         )
         exit(1)
 
+    searched = []
+
+    # 1) Installed product locations
+    libName = _LIB_NAMES[os_key]
+    for installDir in _INSTALL_DIRS[os_key]:
+        lib = installDir / libName
+        searched.append(lib)
+        if lib.exists():
+            return lib.resolve()
+
+    # 2) Local development build, walking up from the current directory
     candidate = Path.cwd()
     for _ in range(8):
         lib = candidate / rel
         if lib.exists():
             return lib.resolve()
         candidate = candidate.parent
+    searched.append(Path.cwd().resolve() / rel)
 
     logger.error(
-        f"TACDev library not found.\n"
-        f"  Expected: {Path.cwd().resolve() / rel}\n"
-        "  Build the project first using build.bat / build.sh."
+        "TACDev library not found.\n"
+        "  Searched:\n"
+        + "\n".join(f"    {p}" for p in searched) + "\n"
+        "  Install QTAC/Alpaca or build the project first using build.bat / build.sh."
     )
     exit(1)
 
@@ -68,6 +105,7 @@ TAC_BAD_TAC_HANDLE = 2
 TACDEV_COMMAND_NOT_FOUND = 3
 TACDEV_BAD_INDEX = 4
 TACDEV_INIT_FAILED = 5
+TACDEV_COMMAND_TIMEOUT = 7
 
 
 def GetErrorString(errorCode: int) -> str:
@@ -79,6 +117,7 @@ def GetErrorString(errorCode: int) -> str:
         4: "Bad TAC index",
         5: "TAC initialization failed",
         6: "TAC Script variable was not found",
+        7: "TAC command timed out waiting for completion",
     }
     return errorDict.get(errorCode, f"Error string cannot be determined. Error code: {errorCode}")
 
@@ -518,6 +557,7 @@ class TACDevice:
     def SetupClassEntries(self, tacDll):
         self.__openByNameFunc = tacDll.OpenHandleByDescription
         self.__openByNameFunc.argtypes = [c_char_p]
+        self.__openByNameFunc.restype = c_ulong
 
         self.__closeFunc = tacDll.CloseTACHandle
         self.__nameFunc = tacDll.GetName

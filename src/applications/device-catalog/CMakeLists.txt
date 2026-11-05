@@ -50,8 +50,9 @@ target_link_libraries(${APP_NAME} PRIVATE
     Qt6::SerialPort
     Qt6::Widgets
     ftd2xx
-    $<$<CONFIG:Debug>:UId;QCommond;QCommonConsoled>
-    $<$<NOT:$<CONFIG:Debug>>:UI;QCommon;QCommonConsole>
+
+    "$<$<CONFIG:Debug>:UId;QCommond;QCommonConsoled>"
+    "$<$<NOT:$<CONFIG:Debug>>:UI;QCommon;QCommonConsole>"
 )
 
 if(WIN32)
@@ -93,3 +94,6 @@ qt_generate_deploy_app_script(
     NO_UNSUPPORTED_PLATFORM_ERROR
 )
 install(SCRIPT ${deploy_script})
+
+# Windows file version resource
+qtac_add_version_info(${APP_NAME} "TAC Device Catalog" "${DEVICE_CATALOG_VERSION}")

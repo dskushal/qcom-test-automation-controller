@@ -1,6 +1,7 @@
 // Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 // SPDX-License-Identifier: BSD-3-Clause
 
+#include "AppCore.h"
 #include "ApplicationEnhancements.h"
 #include "ConsoleApplicationEnhancements.h"
 #include "DeviceCatalog.h"
@@ -9,7 +10,9 @@
 
 // Qt
 
+#include <QApplication>
 #include <QDir>
+#include <QFile>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMediaPlayer>
@@ -21,6 +24,7 @@
 #endif
 #ifdef Q_OS_LINUX
 	#include <unistd.h>
+	#include <cstdlib>
 #endif
 
 const int kConfigNameCol{0};
@@ -29,6 +33,8 @@ const int kPlatformID{2};
 
 const QByteArray kv16FirmwareNotice(QByteArrayLiteral("You've chosen to program the v16 firmware. This firmware may contain updates not applicable to all teams. Uncheck unless you know what you're doing"));
 const QByteArray kv17FirmwareNotice(QByteArrayLiteral("You've chosen to program the v17 firmware. This firmware may contain updates not applicable to all teams. Uncheck unless you know what you're doing"));
+const QByteArray kv18FirmwareNotice(QByteArrayLiteral("You've chosen to program the v18 firmware. This firmware may contain updates not applicable to all teams. Uncheck unless you know what you're doing"));
+const QByteArray kv19FirmwareNotice(QByteArrayLiteral("You've chosen to program the v19 firmware. This firmware may contain updates not applicable to all teams. Uncheck unless you know what you're doing"));
 const QByteArray kDefaultNotice(QByteArrayLiteral("This space is used to share notification to user"));
 
 DeviceCatalog::DeviceCatalog(QWidget* parent) :QDialog(parent)
@@ -210,19 +216,51 @@ void DeviceCatalog::invokeProgrammer(const DebugBoardType type)
 
 void DeviceCatalog::invokeLiteProgrammer(const QString& serialNumber, const PlatformID platformId)
 {
-	QString program = applicationBinPath() + "LiteProgrammer";
+	// Must match the target name in src/applications/programmers/lite-programmer/CMakeLists.txt;
+	// Linux file names are case sensitive.
+	QString program = applicationBinPath() + "LITEProgrammer";
 	QStringList arguments; //-p platformid=18 serial=FT6G3Z6Y
 	arguments << "-p";
 	arguments << "serial=" + serialNumber;
 	arguments << "platformid=" + QString::number(platformId);
 
-	QProcess* process = new QProcess(Q_NULLPTR);
+	QProcess process;
 
-	process->setProgram(program);
-	process->setArguments(arguments);
-	process->startDetached();
+	process.setProgram(program);
+	process.setArguments(arguments);
+	process.setProcessChannelMode(QProcess::MergedChannels);
+	process.start();
 
-	QThread::sleep(1);
+	if (process.waitForStarted(10000) == false)
+	{
+		QMessageBox::warning(this, "Lite Device Not Programmed", QString("Could not start the Lite programmer:\n%1\n\n"
+																		 "The device with serial number %2 was not changed.")
+																	 .arg(QDir::toNativeSeparators(program), serialNumber));
+		return;
+	}
+
+	QApplication::setOverrideCursor(Qt::WaitCursor);
+	bool finished = process.waitForFinished(60000);
+	QApplication::restoreOverrideCursor();
+
+	if (finished == false)
+	{
+		process.kill();
+		process.waitForFinished(5000);
+	}
+
+	if (finished == false || process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+	{
+		QString output = QString::fromLocal8Bit(process.readAll()).trimmed();
+		if (output.isEmpty())
+		{
+			output = finished ? QString("Exit code %1").arg(process.exitCode()) : QString("The programmer did not finish in time.");
+		}
+
+		QMessageBox::warning(this, "Lite Device Not Programmed", QString("Programming the device with serial number %1 failed:\n\n%2")
+																	 .arg(serialNumber, output));
+		return;
+	}
 
 	QMessageBox::information(this, "Lite Device Programmed", QString("The device with serial number %1 needs to be"
 																	 " unplugged and plugged back in.").arg(serialNumber));
@@ -236,11 +274,13 @@ void DeviceCatalog::invokePSOCProgrammer(const QString &serialNumber, const Plat
 	arguments << "serial=" + serialNumber;
 	arguments << "platformid=" + QString::number(platformId);
 
-	QProcess* process = new QProcess(Q_NULLPTR);
-
-	process->setProgram(program);
-	process->setArguments(arguments);
-	process->startDetached();
+	if (QProcess::startDetached(program, arguments) == false)
+	{
+		QMessageBox::warning(this, "PSOC Device Not Programmed", QString("The PSOC programmer is not installed or could not be started:\n%1\n\n"
+																		 "The device with serial number %2 was not changed.")
+																	 .arg(QDir::toNativeSeparators(program), serialNumber));
+		return;
+	}
 
 	QThread::sleep(1);
 
@@ -297,9 +337,9 @@ void DeviceCatalog::on__deviceTable_itemClicked(QTableWidgetItem *item)
 		{
 			if (twi->text() == "PSOC")
 			{
-				// _firmwareUpdateBtn->setEnabled(true);
-				// _firmwareLabel->setEnabled(true);
-				// _firmwareSelect->setEnabled(true);
+				_firmwareUpdateBtn->setEnabled(true);
+				_firmwareLabel->setEnabled(true);
+				_firmwareSelect->setEnabled(true);
 			}
 			else
 			{
@@ -344,13 +384,55 @@ void DeviceCatalog::on__programBtn_clicked()
 
 void DeviceCatalog::on__firmwareUpdateBtn_clicked()
 {
-	// firmware programming capabilities cannot be enabled
-	// due to lack of open-source hardware protocols in psoc
+	QByteArray program;
+
+	AlpacaDevices psocDevices = enumerateDevices(ePSOC);
+
+	program = applicationBinPath().toLatin1() + QDir::separator().toLatin1() + "FWUpdate";
+
+	if (QDir(_firmwareDir).exists())
+	{
+		DeviceSelectionDialog deviceDialog(this);
+		deviceDialog.setDevices(psocDevices);
+
+		if (deviceDialog.exec() == QDialog::Accepted)
+		{
+			AlpacaDevice alpacaDevice = deviceDialog.currentDevice();
+			if (alpacaDevice.isNull() == false)
+			{
+				QByteArray chipsetString{"Unknown"};
+
+				if (alpacaDevice->open())
+				{
+					chipsetString = alpacaDevice->chipVersion().toLatin1();
+					alpacaDevice->close();
+				}
+
+				QByteArray cmdArgs = "path=" + _firmwareDir + QDir::separator().toLatin1() + chipsetString + QDir::separator().toLatin1() + "MicroEpm.cyacd";
+
+#ifdef Q_OS_WIN
+				ShellExecuteA(NULL, NULL, program.constData(), cmdArgs.constData(), _firmwareDir.constData(), 1);
+#endif
+#ifdef Q_OS_LINUX
+				int retcode = system((program + " " + cmdArgs).constData());
+
+				if (retcode == 0)
+					QMessageBox::information(this, "FWUpdate status", "FWUpdate updated debug board firmware successfully");
+				else
+					QMessageBox::critical(this, "FWUpdate status", QString("FWUpdate could not update debug board firmware. Error code: %1").arg(retcode));
+#endif
+			}
+		}
+	}
+	else
+	{
+		QMessageBox::critical(this, "Missing firmware directory", "The firmware directory is not available at the intended install location.");
+	}
 }
 
 void DeviceCatalog::on__docsBtn_clicked()
 {
-	startLocalBrowser(docsRoot() + "/getting-started/08-Device-Catalog.html");
+	startLocalBrowser(docsRoot() + "/getting-started/05-Device-Catalog.html");
 }
 
 void DeviceCatalog::onInfoGroupCloseBtnClicked()
@@ -361,7 +443,12 @@ void DeviceCatalog::onInfoGroupCloseBtnClicked()
 
 void DeviceCatalog::onInfoGroupLinkClicked(const QString& link)
 {
-	_player.playback(QMediaPlayer::PlayingState, link);
+	// Expand the splitter to reveal the video player pane, which starts
+	// collapsed to zero width in the constructor ({1,0}) since no video
+	// is playing until a tutorial link is clicked.
+	_splitter->setSizes({int(0.6 * width()), int(0.4 * width())});
+
+	_player->playback(QMediaPlayer::PlayingState, link);
 }
 
 void DeviceCatalog::on__firmwareSelect_currentTextChanged(const QString &firmwareVersion)
@@ -387,6 +474,17 @@ void DeviceCatalog::on__firmwareSelect_currentTextChanged(const QString &firmwar
 			_firmwareDir = applicationDataPath().toLatin1() + QDir::separator().toLatin1() + "firmware/1.x.17.0";
 			_infoLabelText->setText(kv17FirmwareNotice);
 			_infoGroupBox->show();
+			break;
+		case 18:
+			_firmwareDir = applicationDataPath().toLatin1() + QDir::separator().toLatin1() + "firmware/1.x.18.0";
+			_infoLabelText->setText(kv18FirmwareNotice);
+			_infoGroupBox->show();
+			break;
+		case 19:
+			_firmwareDir = applicationDataPath().toLatin1() + QDir::separator().toLatin1() + "firmware/1.x.19.0";
+			_infoLabelText->setText(kv19FirmwareNotice);
+			_infoGroupBox->show();
+			break;
 		}
 	}
 }
