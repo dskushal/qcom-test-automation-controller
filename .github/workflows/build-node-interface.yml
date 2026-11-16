@@ -47,10 +47,10 @@ jobs:
         uses: actions/cache@v5
         with:
           path: third-party/libftd2xx-linux-x86_64-1.4.33.tgz
-          key: node-ftdi-linux-1.4.33
+          key: node-ftdi-linux-1.4.33-v2
       - name: Download FTDI archive
         if: steps.ftdi.outputs.cache-hit != 'true'
-        run: curl --fail --location --retry 3 "https://web.archive.org/web/20250822044524/https://ftdichip.com/wp-content/uploads/2025/03/libftd2xx-linux-x86_64-1.4.33.tgz" -o third-party/libftd2xx-linux-x86_64-1.4.33.tgz
+        run: curl --fail --location --retry 3 "https://web.archive.org/web/20250822044524id_/https://ftdichip.com/wp-content/uploads/2025/03/libftd2xx-linux-x86_64-1.4.33.tgz" -o third-party/libftd2xx-linux-x86_64-1.4.33.tgz
       - name: Build QTAC
         run: ./build.sh
       - uses: actions/setup-node@v4
@@ -107,11 +107,11 @@ jobs:
         uses: actions/cache@v5
         with:
           path: third-party\CDM-v2.12.36.4-WHQL-Certified.zip
-          key: node-ftdi-windows-x64-2.12.36.4-v2
+          key: node-ftdi-windows-x64-2.12.36.4-v3
       - name: Download FTDI archive
         if: steps.ftdi.outputs.cache-hit != 'true'
         shell: pwsh
-        run: Invoke-WebRequest -Uri "https://web.archive.org/web/20250820134143/https://ftdichip.com/wp-content/uploads/2023/09/CDM-v2.12.36.4-WHQL-Certified.zip" -OutFile "third-party\CDM-v2.12.36.4-WHQL-Certified.zip"
+        run: Invoke-WebRequest -Uri "https://web.archive.org/web/20250820134143id_/https://ftdichip.com/wp-content/uploads/2023/09/CDM-v2.12.36.4-WHQL-Certified.zip" -OutFile "third-party\CDM-v2.12.36.4-WHQL-Certified.zip"
       - name: Validate FTDI archive
         shell: pwsh
         run: |
@@ -201,11 +201,11 @@ jobs:
         uses: actions/cache@v5
         with:
           path: third-party\CDM-v2.12.36.20-for-ARM64-WHQL-Certified.zip
-          key: node-ftdi-windows-arm64-2.12.36.20
+          key: node-ftdi-windows-arm64-2.12.36.20-v2
       - name: Download FTDI archive
         if: steps.ftdi.outputs.cache-hit != 'true'
         shell: pwsh
-        run: Invoke-WebRequest -Uri "https://web.archive.org/web/20250821211500/https://ftdichip.com/wp-content/uploads/2025/03/CDM-v2.12.36.20-for-ARM64-WHQL-Certified.zip" -OutFile "third-party\CDM-v2.12.36.20-for-ARM64-WHQL-Certified.zip"
+        run: Invoke-WebRequest -Uri "https://web.archive.org/web/20250821211500id_/https://ftdichip.com/wp-content/uploads/2025/03/CDM-v2.12.36.20-for-ARM64-WHQL-Certified.zip" -OutFile "third-party\CDM-v2.12.36.20-for-ARM64-WHQL-Certified.zip"
       - name: Build QTAC
         shell: cmd
         run: build.bat
