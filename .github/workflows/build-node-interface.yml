@@ -140,6 +140,8 @@ jobs:
           if (-not (Test-Path 'build/Release/qtac.node')) { throw 'Native build did not produce build/Release/qtac.node.' }
           npm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $qtacRuntimeBin = Join-Path $env:GITHUB_WORKSPACE '__Builds\x64\Release\bin'
+          $env:Path = "$env:QTBIN;$qtacRuntimeBin;$env:Path"
           npm run test:unit
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package and smoke-test
@@ -222,6 +224,8 @@ jobs:
           if (-not (Test-Path 'build/Release/qtac.node')) { throw 'Native build did not produce build/Release/qtac.node.' }
           npm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $qtacRuntimeBin = Join-Path $env:GITHUB_WORKSPACE '__Builds\ARM64\Release\bin'
+          $env:Path = "$env:QTBIN;$qtacRuntimeBin;$env:Path"
           npm run test:unit
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package and smoke-test
