@@ -142,13 +142,19 @@ Napi::Value TACDevWrapper::InitializeTACDev(const Napi::CallbackInfo& info) {
 
 Napi::Value TACDevWrapper::GetAlpacaVersion(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    std::string version = CallStringFunction(::GetAlpacaVersion);
+    std::string version;
+    if (!CallStringFunction(env, ::GetAlpacaVersion, version, "Failed to get QTAC version")) {
+        return env.Undefined();
+    }
     return Napi::String::New(env, version);
 }
 
 Napi::Value TACDevWrapper::GetTACVersion(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
-    std::string version = CallStringFunction(::GetTACVersion);
+    std::string version;
+    if (!CallStringFunction(env, ::GetTACVersion, version, "Failed to get TAC version")) {
+        return env.Undefined();
+    }
     return Napi::String::New(env, version);
 }
 
@@ -273,35 +279,50 @@ Napi::Value TACDevWrapper::GetHandle(const Napi::CallbackInfo& info) {
 Napi::Value TACDevWrapper::GetName(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     ValidateHandle(env, handle_);
-    std::string name = CallStringFunctionWithHandle(handle_, ::GetName);
+    std::string name;
+    if (!CallStringFunctionWithHandle(env, handle_, ::GetName, name, "Failed to get device name")) {
+        return env.Undefined();
+    }
     return Napi::String::New(env, name);
 }
 
 Napi::Value TACDevWrapper::GetFirmwareVersion(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     ValidateHandle(env, handle_);
-    std::string fw = CallStringFunctionWithHandle(handle_, ::GetFirmwareVersion);
+    std::string fw;
+    if (!CallStringFunctionWithHandle(env, handle_, ::GetFirmwareVersion, fw, "Failed to get firmware version")) {
+        return env.Undefined();
+    }
     return Napi::String::New(env, fw);
 }
 
 Napi::Value TACDevWrapper::GetHardware(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     ValidateHandle(env, handle_);
-    std::string hw = CallStringFunctionWithHandle(handle_, ::GetHardware);
+    std::string hw;
+    if (!CallStringFunctionWithHandle(env, handle_, ::GetHardware, hw, "Failed to get hardware type")) {
+        return env.Undefined();
+    }
     return Napi::String::New(env, hw);
 }
 
 Napi::Value TACDevWrapper::GetHardwareVersion(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     ValidateHandle(env, handle_);
-    std::string hwVer = CallStringFunctionWithHandle(handle_, ::GetHardwareVersion);
+    std::string hwVer;
+    if (!CallStringFunctionWithHandle(env, handle_, ::GetHardwareVersion, hwVer, "Failed to get hardware version")) {
+        return env.Undefined();
+    }
     return Napi::String::New(env, hwVer);
 }
 
 Napi::Value TACDevWrapper::GetUUID(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     ValidateHandle(env, handle_);
-    std::string uuid = CallStringFunctionWithHandle(handle_, ::GetUUID);
+    std::string uuid;
+    if (!CallStringFunctionWithHandle(env, handle_, ::GetUUID, uuid, "Failed to get device UUID")) {
+        return env.Undefined();
+    }
     return Napi::String::New(env, uuid);
 }
 
@@ -1018,8 +1039,10 @@ Napi::Value TACDevWrapper::GetHelpText(const Napi::CallbackInfo& info) {
     TAC_ERROR result = ::GetHelpText(handle_, buffer, sizeof(buffer), &actualSize);
 
     if (result == TACDEV_BUFFER_TOO_SMALL && actualSize > 0) {
-        std::vector<char> largeBuffer(actualSize);
-        result = ::GetHelpText(handle_, largeBuffer.data(), actualSize, &actualSize);
+        std::vector<char> largeBuffer(static_cast<size_t>(actualSize) + 1, '\0');
+        result = ::GetHelpText(
+            handle_, largeBuffer.data(), static_cast<int>(largeBuffer.size()), &actualSize
+        );
         if (result == NO_TAC_ERROR) {
             return Napi::String::New(env, largeBuffer.data());
         }

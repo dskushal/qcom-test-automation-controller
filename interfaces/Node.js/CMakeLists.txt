@@ -76,6 +76,16 @@ set_target_properties(qtac_napi PROPERTIES
     CXX_STANDARD_REQUIRED ON
 )
 
+# Keep the packaged Linux addon relocatable: its Qt runtime libraries are
+# staged beside it in build/Release/lib by package-runtime-linux.sh.
+if(UNIX AND NOT APPLE)
+    set_target_properties(qtac_napi PROPERTIES
+        BUILD_RPATH "$ORIGIN/lib"
+        INSTALL_RPATH "$ORIGIN/lib"
+        BUILD_WITH_INSTALL_RPATH TRUE
+    )
+endif()
+
 # Include directories
 target_include_directories(qtac_napi PRIVATE
     ${NODE_ADDON_API_DIR}

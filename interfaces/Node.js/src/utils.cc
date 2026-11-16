@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #include "utils.h"
+#include <algorithm>
 #include <sstream>
 #include <vector>
 
@@ -49,45 +50,68 @@ void ThrowTACError(const Napi::Env& env, TAC_ERROR error, const std::string& con
     }
 }
 
-std::string CallStringFunction(
-    std::function<TAC_ERROR(char*, int)> func,
+namespace {
+
+template <typename Function>
+bool CallStringFunctionImpl(
+    const Napi::Env& env,
+    Function&& func,
+    std::string& output,
+    const std::string& context,
     int initialBufferSize
 ) {
-    std::vector<char> buffer(initialBufferSize);
-    TAC_ERROR result = func(buffer.data(), static_cast<int>(buffer.size()));
+    constexpr int kMaximumBufferSize = 16 * 1024 * 1024;
+    int bufferSize = std::clamp(initialBufferSize, 1, kMaximumBufferSize);
+    std::vector<char> buffer(static_cast<size_t>(bufferSize), '\0');
 
-    if (result == TACDEV_BUFFER_TOO_SMALL) {
-        // Retry with larger buffer
-        buffer.resize(initialBufferSize * 2);
-        result = func(buffer.data(), static_cast<int>(buffer.size()));
+    while (true) {
+        const TAC_ERROR result = func(buffer.data(), bufferSize);
+        if (result == NO_TAC_ERROR) {
+            output.assign(buffer.data());
+            return true;
+        }
+
+        if (result != TACDEV_BUFFER_TOO_SMALL || bufferSize == kMaximumBufferSize) {
+            ThrowTACError(env, result, context);
+            return false;
+        }
+
+        bufferSize = bufferSize > kMaximumBufferSize / 2
+            ? kMaximumBufferSize
+            : bufferSize * 2;
+        buffer.assign(static_cast<size_t>(bufferSize), '\0');
     }
-
-    if (result != NO_TAC_ERROR) {
-        return "";
-    }
-
-    return std::string(buffer.data());
 }
 
-std::string CallStringFunctionWithHandle(
-    TAC_HANDLE handle,
-    std::function<TAC_ERROR(TAC_HANDLE, char*, int)> func,
+} // namespace
+
+bool CallStringFunction(
+    const Napi::Env& env,
+    std::function<TAC_ERROR(char*, int)> func,
+    std::string& output,
+    const std::string& context,
     int initialBufferSize
 ) {
-    std::vector<char> buffer(initialBufferSize);
-    TAC_ERROR result = func(handle, buffer.data(), static_cast<int>(buffer.size()));
+    return CallStringFunctionImpl(env, std::move(func), output, context, initialBufferSize);
+}
 
-    if (result == TACDEV_BUFFER_TOO_SMALL) {
-        // Retry with larger buffer
-        buffer.resize(initialBufferSize * 2);
-        result = func(handle, buffer.data(), static_cast<int>(buffer.size()));
-    }
-
-    if (result != NO_TAC_ERROR) {
-        return "";
-    }
-
-    return std::string(buffer.data());
+bool CallStringFunctionWithHandle(
+    const Napi::Env& env,
+    TAC_HANDLE handle,
+    std::function<TAC_ERROR(TAC_HANDLE, char*, int)> func,
+    std::string& output,
+    const std::string& context,
+    int initialBufferSize
+) {
+    return CallStringFunctionImpl(
+        env,
+        [&func, handle](char* buffer, int bufferSize) {
+            return func(handle, buffer, bufferSize);
+        },
+        output,
+        context,
+        initialBufferSize
+    );
 }
 
 Napi::Object ParseDeviceInfo(const Napi::Env& env, const std::string& data) {

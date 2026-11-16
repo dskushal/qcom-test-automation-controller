@@ -24,17 +24,23 @@ void ThrowTACError(const Napi::Env& env, TAC_ERROR error, const std::string& con
  * Call a TACDev function that returns a string
  * Handles buffer allocation and automatic retry if buffer is too small
  */
-std::string CallStringFunction(
+bool CallStringFunction(
+    const Napi::Env& env,
     std::function<TAC_ERROR(char*, int)> func,
+    std::string& output,
+    const std::string& context,
     int initialBufferSize = 256
 );
 
 /**
  * Call a TACDev function that returns a string with handle parameter
  */
-std::string CallStringFunctionWithHandle(
+bool CallStringFunctionWithHandle(
+    const Napi::Env& env,
     TAC_HANDLE handle,
     std::function<TAC_ERROR(TAC_HANDLE, char*, int)> func,
+    std::string& output,
+    const std::string& context,
     int initialBufferSize = 256
 );
 

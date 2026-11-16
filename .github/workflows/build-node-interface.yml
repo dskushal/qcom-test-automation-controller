@@ -1,0 +1,282 @@
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause
+
+name: Build Node.js interface runtime packages
+
+on:
+  push:
+    branches: ['**']
+    tags: ['qtac-node-*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: node-interface-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-x64:
+    name: Linux x64 / Qt 6.10.0
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip wget build-essential libgl1-mesa-dev mesa-common-dev uuid-dev libpulse-dev ninja-build libudev-dev libxkbcommon-x11-0 x11-common libxcb-xinerama0-dev patchelf zip
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install aqtinstall
+        run: pip install aqtinstall
+      - name: Cache Qt
+        uses: actions/cache@v5
+        with:
+          path: 6.10.0/gcc_64
+          key: node-qt-linux-6.10.0
+      - name: Install Qt
+        run: |
+          aqt install-qt linux desktop 6.10.0 linux_gcc_64 -m qtmultimedia qtserialport
+          echo "QTBIN=$GITHUB_WORKSPACE/6.10.0/gcc_64/bin" >> "$GITHUB_ENV"
+          echo "CMAKE_PREFIX_PATH=$GITHUB_WORKSPACE/6.10.0/gcc_64" >> "$GITHUB_ENV"
+      - name: Cache FTDI archive
+        id: ftdi
+        uses: actions/cache@v5
+        with:
+          path: third-party/libftd2xx-linux-x86_64-1.4.33.tgz
+          key: node-ftdi-linux-1.4.33
+      - name: Download FTDI archive
+        if: steps.ftdi.outputs.cache-hit != 'true'
+        run: curl --fail --location --retry 3 "https://web.archive.org/web/20250822044524/https://ftdichip.com/wp-content/uploads/2025/03/libftd2xx-linux-x86_64-1.4.33.tgz" -o third-party/libftd2xx-linux-x86_64-1.4.33.tgz
+      - name: Build QTAC
+        run: ./build.sh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build and test Node interface
+        working-directory: interfaces/Node.js
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm run build:native -- --arch=x64
+          npm run test:unit
+      - name: Package and smoke-test
+        working-directory: interfaces/Node.js
+        run: |
+          package_dir="$RUNNER_TEMP/qtac-node-linux-x64-$GITHUB_RUN_ID"
+          archive="$RUNNER_TEMP/qtac-node-linux-x64.zip"
+          bash package-runtime-linux.sh "$GITHUB_WORKSPACE/interfaces/Node.js/build/Release/qtac.node" "$GITHUB_WORKSPACE/6.10.0/gcc_64" "$GITHUB_WORKSPACE/__Builds/Linux/Release/lib" "$package_dir" "$GITHUB_SHA" "6.10.0"
+          env -u LD_LIBRARY_PATH node test-packaged-addon.cjs "$package_dir/qtac.node"
+          (cd "$package_dir" && zip -rq "$archive" .)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qtac-node-linux-x64
+          path: ${{ runner.temp }}/qtac-node-linux-x64.zip
+          if-no-files-found: error
+
+  windows-x64:
+    name: Windows x64 / Qt 6.10.0
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install aqtinstall
+        run: pip install aqtinstall
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Cache Qt
+        uses: actions/cache@v5
+        with:
+          path: C:\Qt\6.10.0\msvc2022_64
+          key: node-qt-windows-x64-6.10.0
+      - name: Install Qt
+        shell: pwsh
+        run: |
+          aqt install-qt windows desktop 6.10.0 win64_msvc2022_64 --outputdir C:\Qt -m qtmultimedia qtserialport
+          "QTBIN=C:\Qt\6.10.0\msvc2022_64\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CMAKE_PREFIX_PATH=C:\Qt\6.10.0\msvc2022_64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Cache FTDI archive
+        id: ftdi
+        uses: actions/cache@v5
+        with:
+          path: third-party\CDM-v2.12.36.4-WHQL-Certified.zip
+          key: node-ftdi-windows-x64-2.12.36.4
+      - name: Download FTDI archive
+        if: steps.ftdi.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: Invoke-WebRequest -Uri "https://web.archive.org/web/20250820134143/https://ftdichip.com/wp-content/uploads/2023/09/CDM-v2.12.36.4-WHQL-Certified.zip" -OutFile "third-party\CDM-v2.12.36.4-WHQL-Certified.zip"
+      - name: Install .NET Framework 4.8 Developer Pack
+        run: choco install netfx-4.8-devpack -y
+      - name: Build QTAC
+        shell: cmd
+        run: build.bat
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build and test Node interface
+        shell: pwsh
+        working-directory: interfaces/Node.js
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm run build:native -- --arch=x64
+          npm run test:unit
+      - name: Package and smoke-test
+        shell: pwsh
+        working-directory: interfaces/Node.js
+        run: |
+          $packageDirectory = Join-Path $env:RUNNER_TEMP "qtac-node-windows-x64-$env:GITHUB_RUN_ID"
+          $archive = Join-Path $env:RUNNER_TEMP 'qtac-node-windows-x64.zip'
+          $packageArgs = @{
+            AddonPath = Join-Path $env:GITHUB_WORKSPACE 'interfaces\Node.js\build\Release\qtac.node'
+            QtBin = $env:QTBIN
+            RuntimeBin = Join-Path $env:GITHUB_WORKSPACE '__Builds\x64\Release\bin'
+            PackageDirectory = $packageDirectory
+            OutputZip = $archive
+            Architecture = 'x64'
+            QtVersion = '6.10.0'
+            SourceCommit = $env:GITHUB_SHA
+          }
+          .\package-runtime-windows.ps1 @packageArgs
+          $nodeExe = (Get-Command node).Source
+          $savedPath = $env:Path
+          try {
+            $env:Path = "$packageDirectory;$(Split-Path $nodeExe -Parent);$env:SystemRoot\System32;$env:SystemRoot"
+            & $nodeExe test-packaged-addon.cjs (Join-Path $packageDirectory 'qtac.node')
+            if ($LASTEXITCODE -ne 0) { throw 'Packaged addon smoke test failed.' }
+          } finally { $env:Path = $savedPath }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qtac-node-windows-x64
+          path: ${{ runner.temp }}\qtac-node-windows-x64.zip
+          if-no-files-found: error
+
+  windows-arm64:
+    name: Windows ARM64 / Qt 6.10.0
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install aqtinstall
+        run: pip install aqtinstall
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: arm64
+      - name: Cache Qt
+        uses: actions/cache@v5
+        with:
+          path: C:\Qt\6.10.0\msvc2022_arm64
+          key: node-qt-windows-arm64-6.10.0
+      - name: Install Qt
+        shell: pwsh
+        run: |
+          aqt install-qt windows_arm64 desktop 6.10.0 win64_msvc2022_arm64 --outputdir C:\Qt --autodesktop -m qtmultimedia qtserialport
+          "QTBIN=C:\Qt\6.10.0\msvc2022_arm64\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CMAKE_PREFIX_PATH=C:\Qt\6.10.0\msvc2022_arm64" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Cache FTDI archive
+        id: ftdi
+        uses: actions/cache@v5
+        with:
+          path: third-party\CDM-v2.12.36.20-for-ARM64-WHQL-Certified.zip
+          key: node-ftdi-windows-arm64-2.12.36.20
+      - name: Download FTDI archive
+        if: steps.ftdi.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: Invoke-WebRequest -Uri "https://web.archive.org/web/20250821211500/https://ftdichip.com/wp-content/uploads/2025/03/CDM-v2.12.36.20-for-ARM64-WHQL-Certified.zip" -OutFile "third-party\CDM-v2.12.36.20-for-ARM64-WHQL-Certified.zip"
+      - name: Build QTAC
+        shell: cmd
+        run: build.bat
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build and test Node interface
+        shell: pwsh
+        working-directory: interfaces/Node.js
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+          npm run build:native -- --arch=arm64
+          npm run test:unit
+      - name: Package and smoke-test
+        shell: pwsh
+        working-directory: interfaces/Node.js
+        run: |
+          $packageDirectory = Join-Path $env:RUNNER_TEMP "qtac-node-windows-arm64-$env:GITHUB_RUN_ID"
+          $archive = Join-Path $env:RUNNER_TEMP 'qtac-node-windows-arm64.zip'
+          $packageArgs = @{
+            AddonPath = Join-Path $env:GITHUB_WORKSPACE 'interfaces\Node.js\build\Release\qtac.node'
+            QtBin = $env:QTBIN
+            RuntimeBin = Join-Path $env:GITHUB_WORKSPACE '__Builds\ARM64\Release\bin'
+            PackageDirectory = $packageDirectory
+            OutputZip = $archive
+            Architecture = 'arm64'
+            QtVersion = '6.10.0'
+            SourceCommit = $env:GITHUB_SHA
+          }
+          .\package-runtime-windows.ps1 @packageArgs
+          $nodeExe = (Get-Command node).Source
+          $savedPath = $env:Path
+          try {
+            $env:Path = "$packageDirectory;$(Split-Path $nodeExe -Parent);$env:SystemRoot\System32;$env:SystemRoot"
+            & $nodeExe test-packaged-addon.cjs (Join-Path $packageDirectory 'qtac.node')
+            if ($LASTEXITCODE -ne 0) { throw 'Packaged addon smoke test failed.' }
+          } finally { $env:Path = $savedPath }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qtac-node-windows-arm64
+          path: ${{ runner.temp }}\qtac-node-windows-arm64.zip
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish versioned addon packages
+    if: startsWith(github.ref, 'refs/tags/qtac-node-')
+    needs: [linux-x64, windows-x64, windows-arm64]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Verify tagged commit is on fork main
+        id: verify-main
+        run: |
+          git fetch origin main --quiet
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "on_main=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Tag is not on the fork's main branch; skipping release upload."
+            echo "on_main=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.verify-main.outputs.on_main == 'true'
+        with:
+          pattern: qtac-node-*
+          path: release-assets
+          merge-multiple: true
+      - name: Publish release assets
+        if: steps.verify-main.outputs.on_main == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release-assets/*.zip)
+          if [ "${#assets[@]}" -ne 3 ]; then
+            echo "Expected three packages, found ${#assets[@]}" >&2
+            ls -la release-assets
+            exit 1
+          fi
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
+          fi
+          gh release upload "$TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
