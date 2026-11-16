@@ -9,7 +9,6 @@
     "install": "cmake-js compile",
     "build": "tsc",
     "build:native": "cmake-js compile",
-    "prebuild": "npm run build:native",
     "test": "jest",
     "test:unit": "jest test/unit",
     "test:integration": "jest test/integration",

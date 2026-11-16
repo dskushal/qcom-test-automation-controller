@@ -169,15 +169,24 @@ cmake -S . -B build\Debug -DCMAKE_PREFIX_PATH="%QTBIN%\.." ^
     -DCMAKE_GENERATOR=Ninja ^
     -DCMAKE_BUILD_TYPE=Debug ^
     -DCMAKE_CXX_FLAGS_INIT=-DQT_QML_DEBUG
+if errorlevel 1 exit /b 1
 
 cmake --build build\Debug
+if errorlevel 1 exit /b 1
 
 cmake -S . -B build\Release -DCMAKE_PREFIX_PATH="%QTBIN%\.." ^
     -DCMAKE_COLOR_DIAGNOSTICS=ON ^
     -DCMAKE_GENERATOR=Ninja ^
     -DCMAKE_BUILD_TYPE=Release
+if errorlevel 1 exit /b 1
 
 cmake --build build\Release
+if errorlevel 1 exit /b 1
+
+if not exist "__Builds\%ARCH%\Release\lib\TACDev.lib" (
+    echo ERROR: TACDev import library was not produced at __Builds\%ARCH%\Release\lib\TACDev.lib
+    exit /b 1
+)
 
 @REM ---------------------------------------------------------------------------
 @REM  TACDevInterop.dll

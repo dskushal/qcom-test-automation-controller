@@ -60,8 +60,9 @@ jobs:
         working-directory: interfaces/Node.js
         run: |
           npm ci --ignore-scripts
-          npm run build
           npm run build:native -- --arch=x64
+          test -f build/Release/qtac.node
+          npm run build
           npm run test:unit
       - name: Package and smoke-test
         working-directory: interfaces/Node.js
@@ -106,11 +107,21 @@ jobs:
         uses: actions/cache@v5
         with:
           path: third-party\CDM-v2.12.36.4-WHQL-Certified.zip
-          key: node-ftdi-windows-x64-2.12.36.4
+          key: node-ftdi-windows-x64-2.12.36.4-v2
       - name: Download FTDI archive
         if: steps.ftdi.outputs.cache-hit != 'true'
         shell: pwsh
         run: Invoke-WebRequest -Uri "https://web.archive.org/web/20250820134143/https://ftdichip.com/wp-content/uploads/2023/09/CDM-v2.12.36.4-WHQL-Certified.zip" -OutFile "third-party\CDM-v2.12.36.4-WHQL-Certified.zip"
+      - name: Validate FTDI archive
+        shell: pwsh
+        run: |
+          $archive = 'third-party\CDM-v2.12.36.4-WHQL-Certified.zip'
+          $entries = tar -tf $archive
+          if ($LASTEXITCODE -ne 0) { throw 'FTDI archive is not a valid ZIP file.' }
+          if (($entries -notcontains 'amd64/ftd2xx.lib') -and ($entries -notcontains 'Static/amd64/ftd2xx.lib')) {
+            $entries
+            throw 'FTDI archive does not contain the x64 import library expected by QTAC.'
+          }
       - name: Install .NET Framework 4.8 Developer Pack
         run: choco install netfx-4.8-devpack -y
       - name: Build QTAC
@@ -124,9 +135,13 @@ jobs:
         working-directory: interfaces/Node.js
         run: |
           npm ci --ignore-scripts
-          npm run build
           npm run build:native -- --arch=x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path 'build/Release/qtac.node')) { throw 'Native build did not produce build/Release/qtac.node.' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:unit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package and smoke-test
         shell: pwsh
         working-directory: interfaces/Node.js
@@ -202,9 +217,13 @@ jobs:
         working-directory: interfaces/Node.js
         run: |
           npm ci --ignore-scripts
-          npm run build
           npm run build:native -- --arch=arm64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path 'build/Release/qtac.node')) { throw 'Native build did not produce build/Release/qtac.node.' }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run test:unit
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Package and smoke-test
         shell: pwsh
         working-directory: interfaces/Node.js

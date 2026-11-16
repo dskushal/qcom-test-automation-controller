@@ -15,7 +15,7 @@ if(WIN32)
         set(FTDI_ARCHIVE "CDM-v2.12.36.4-WHQL-Certified.zip")
         set(FTDI_WIN_ARCH "x64")
         set(FTDI_ZIP_LIB_GLOB "amd64/ftd2xx.lib")
-        set(FTDI_ZIP_DLL_GLOB "amd64/FTD2XX64.dll")
+        set(FTDI_ZIP_DLL_GLOB "amd64/ftd2xx64.dll")
     endif()
 
     set(DEBUG_LIB "${CMAKE_SOURCE_DIR}/__Builds/${FTDI_WIN_ARCH}/Debug/lib/ftd2xx.lib")
