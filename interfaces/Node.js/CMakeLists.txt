@@ -76,16 +76,6 @@ set_target_properties(qtac_napi PROPERTIES
     CXX_STANDARD_REQUIRED ON
 )
 
-# Keep the packaged Linux addon relocatable: its Qt runtime libraries are
-# staged beside it in build/Release/lib by package-runtime-linux.sh.
-if(UNIX AND NOT APPLE)
-    set_target_properties(qtac_napi PROPERTIES
-        BUILD_RPATH "$ORIGIN/lib"
-        INSTALL_RPATH "$ORIGIN/lib"
-        BUILD_WITH_INSTALL_RPATH TRUE
-    )
-endif()
-
 # Include directories
 target_include_directories(qtac_napi PRIVATE
     ${NODE_ADDON_API_DIR}
@@ -121,13 +111,15 @@ if(STANDALONE_BUILD)
         set(BUILD_CONFIG "Release")
     endif()
 
-    # Look for TACDev library in build output (static library)
+    # The main QTAC project builds TACDev as a shared library. Windows also
+    # needs its import library when linking the Node addon.
     set(TACDEV_LIB_PATH "${REPO_ROOT}/__Builds/${BUILD_ARCH}/${BUILD_CONFIG}")
 
     if(WIN32)
         set(TACDEV_LIB_FILE "${TACDEV_LIB_PATH}/lib/${TACDEV_LIB_NAME}.lib")
+        set(TACDEV_RUNTIME_FILE "${TACDEV_LIB_PATH}/bin/${TACDEV_LIB_NAME}.dll")
     else()
-        set(TACDEV_LIB_FILE "${TACDEV_LIB_PATH}/lib/lib${TACDEV_LIB_NAME}.a")
+        set(TACDEV_LIB_FILE "${TACDEV_LIB_PATH}/lib/lib${TACDEV_LIB_NAME}.so")
     endif()
 
     message(STATUS "Looking for TACDev library at: ${TACDEV_LIB_FILE}")
@@ -136,11 +128,21 @@ if(STANDALONE_BUILD)
         message(FATAL_ERROR "TACDev library not found at ${TACDEV_LIB_FILE}. Please build the main QTAC project first using build.bat or build.sh")
     endif()
 
-    # Create imported target for static library
-    add_library(TACDev STATIC IMPORTED)
-    set_target_properties(TACDev PROPERTIES
-        IMPORTED_LOCATION "${TACDEV_LIB_FILE}"
-    )
+    if(WIN32 AND NOT EXISTS "${TACDEV_RUNTIME_FILE}")
+        message(FATAL_ERROR "TACDev runtime library not found at ${TACDEV_RUNTIME_FILE}")
+    endif()
+
+    add_library(TACDev SHARED IMPORTED)
+    if(WIN32)
+        set_target_properties(TACDev PROPERTIES
+            IMPORTED_IMPLIB "${TACDEV_LIB_FILE}"
+            IMPORTED_LOCATION "${TACDEV_RUNTIME_FILE}"
+        )
+    else()
+        set_target_properties(TACDev PROPERTIES
+            IMPORTED_LOCATION "${TACDEV_LIB_FILE}"
+        )
+    endif()
 
     target_link_libraries(qtac_napi PRIVATE TACDev)
 
@@ -244,6 +246,19 @@ else()
     else()
         target_link_libraries(qtac_napi PRIVATE TACDev)
     endif()
+endif()
+
+# Keep the packaged Linux addon relocatable while allowing CI tests to load
+# dependencies from the QTAC build tree before packaging.
+if(UNIX AND NOT APPLE)
+    set(QTAC_NAPI_BUILD_RPATH "$ORIGIN/lib")
+    if(STANDALONE_BUILD)
+        list(APPEND QTAC_NAPI_BUILD_RPATH "${TACDEV_LIB_PATH}/lib")
+    endif()
+    set_target_properties(qtac_napi PROPERTIES
+        BUILD_RPATH "${QTAC_NAPI_BUILD_RPATH}"
+        INSTALL_RPATH "$ORIGIN/lib"
+    )
 endif()
 
 # N-API functions are supplied by the Node.js runtime. CMake.js exposes the
