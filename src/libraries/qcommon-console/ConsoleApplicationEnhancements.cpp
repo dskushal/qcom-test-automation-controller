@@ -24,6 +24,7 @@
 	#pragma comment(lib, "shell32")
 #endif
 #ifdef Q_OS_LINUX
+	#include <dlfcn.h>
 	#include <pwd.h>
 	#include <unistd.h>
 #endif
@@ -268,19 +269,32 @@ QString killOneDrive(const QString& testPath, const QString& revertPath)
 	return righteousPath;
 }
 
-QString getModuleFilePath(const QString &moduleFileName)
+// Returns the path of the binary containing this code. When qcommon-console
+// is linked into TACDev, this resolves to TACDev rather than its host process.
+QString getCurrentModuleFilePath()
 {
 	QString result;
-	QString platformModuleFileName{moduleFileName};
+	static int moduleAnchor{0};
 
 #ifdef Q_OS_WIN
-	char path[_MAX_PATH + 1];
-	platformModuleFileName += ".dll";
-	GetModuleFileNameA(GetModuleHandleA(platformModuleFileName.toLatin1().data()), path, sizeof(path));
-	result = QByteArray(path);
+	HMODULE moduleHandle{Q_NULLPTR};
+	if (GetModuleHandleExW(
+			GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+			reinterpret_cast<LPCWSTR>(&moduleAnchor), &moduleHandle) != FALSE)
+	{
+		constexpr DWORD kModulePathSize{32768};
+		WCHAR path[kModulePathSize]{};
+		const DWORD length = GetModuleFileNameW(moduleHandle, path, kModulePathSize);
+		if (length > 0 && length < kModulePathSize)
+			result = QString::fromWCharArray(path, static_cast<int>(length));
+	}
+#elif defined(Q_OS_LINUX)
+	Dl_info moduleInfo{};
+	if (dladdr(&moduleAnchor, &moduleInfo) != 0 && moduleInfo.dli_fname != Q_NULLPTR)
+		result = QFileInfo(QString::fromLocal8Bit(moduleInfo.dli_fname)).absoluteFilePath();
 #endif
 
-	 return result;
+	return result;
 }
 
 void cleanIt(const QString &pathToClean)
@@ -410,12 +424,18 @@ QString tacConfigRoot()
 		return dataRoot + "/";
 	}
 
-	// applicationDirPath() needs a QCoreApplication. TACDev can be loaded by
-	// hosts that have none, so only search next to the executable when one
-	// exists.
-	if (QCoreApplication::instance() != Q_NULLPTR)
+	// Prefer the binary containing TACDev code so configurations can be
+	// packaged beside TACDev even when the host has no QCoreApplication.
+	QString moduleDirectory;
+	const QString moduleFilePath = getCurrentModuleFilePath();
+	if (moduleFilePath.isEmpty() == false)
+		moduleDirectory = QFileInfo(moduleFilePath).absolutePath();
+	else if (QCoreApplication::instance() != Q_NULLPTR)
+		moduleDirectory = QCoreApplication::applicationDirPath();
+
+	if (moduleDirectory.isEmpty() == false)
 	{
-		QDir dir(QCoreApplication::applicationDirPath());
+		QDir dir(moduleDirectory);
 
 		for (int i = 0; i < 5; ++i)
 		{
@@ -440,7 +460,7 @@ QString tacConfigRoot()
 	{
 		reportedMissing = true;
 		qWarning() << "tacConfigRoot: no" << kDeviceList << "found in" << dataRoot
-			<< "or above the executable - configurations will not load";
+			<< "or beside/above the loaded module or executable - configurations will not load";
 	}
 
 	return dataRoot + "/";
